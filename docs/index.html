@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>HCAD Property Map</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.heat@0.2.0/dist/leaflet-heat.js"></script>
+<style>
+:root{--bg:#ffffffee;--ink:#1f2937;--muted:#6b7280;--line:#e5e7eb;--accent:#2563eb}
+html,body{margin:0;height:100%;font-family:Inter,"Segoe UI",system-ui,-apple-system,sans-serif;font-size:13px;color:var(--ink)}
+#map{position:absolute;inset:0}
+.leaflet-tile-pane{filter:saturate(.75) brightness(1.03)}
+.panel{position:absolute;top:12px;right:12px;bottom:44px;z-index:1000;width:290px;display:flex;flex-direction:column;background:var(--bg);backdrop-filter:blur(10px);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 30px rgba(15,23,42,.18);overflow:hidden}
+.head{padding:14px 16px;background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff}
+.head h3{margin:0;font-size:16px;font-weight:700;letter-spacing:.2px}
+.head small{opacity:.85}
+.stats{display:flex;gap:8px;padding:12px 16px 4px}
+.stat{flex:1;background:#f3f4f6;border-radius:10px;padding:8px 10px}
+.stat b{display:block;font-size:18px;line-height:1.1}
+.stat span{font-size:11px;color:var(--muted)}
+.stat.hl{background:#eff6ff}.stat.hl b{color:var(--accent)}
+.body{padding:4px 16px 12px;overflow:auto;flex:1}
+.panel label{display:block;margin:12px 0 4px;font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+.panel select,.panel input[type=text]{width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;font:inherit;color:var(--ink)}
+.panel select:focus,.panel input:focus{outline:2px solid #bfdbfe;border-color:var(--accent)}
+.row{display:flex;gap:6px}
+details{border:1px solid var(--line);border-radius:8px;padding:6px 9px;background:#fff}
+summary{cursor:pointer;font-weight:600}
+#exlist{max-height:180px;overflow:auto;border-top:1px solid var(--line);padding-top:4px}
+details a{color:var(--accent);text-decoration:none}
+.legend{margin-top:14px;padding-top:4px;border-top:1px solid var(--line)}
+.legend div{display:flex;align-items:center;margin:4px 0}
+.legend i{width:12px;height:12px;border-radius:50%;margin-right:8px;display:inline-block}
+.watermark{position:absolute;left:12px;bottom:12px;z-index:1000;background:#ffffffe6;border:1px solid var(--line);border-radius:10px;padding:7px 12px;font-size:11.5px;line-height:1.35;color:#374151;box-shadow:0 4px 14px rgba(15,23,42,.15);max-width:420px}
+.watermark b{color:#1e3a8a}
+.leaflet-popup-content-wrapper{border-radius:12px}
+.leaflet-popup-content{font-size:12.5px;line-height:1.5}
+@media(max-width:700px){.panel{width:auto;left:12px;bottom:auto;max-height:55vh}.watermark{max-width:calc(100% - 24px)}}
+</style>
+</head>
+<body>
+<div id="map"></div>
+<div class="panel">
+  <div class="head"><h3>HCAD Property Explorer</h3><small>Harris County appraisal records, geocoded</small></div>
+  <div class="stats">
+    <div class="stat"><b id="total">–</b><span>Total properties</span></div>
+    <div class="stat hl"><b id="count">–</b><span>Matching filters</span></div>
+  </div>
+  <div class="body">
+  <label>View</label>
+  <select id="mode">
+    <option value="value">Points – market value</option>
+    <option value="change">Points – value change vs prior</option>
+    <option value="protest">Points – protest status</option>
+    <option value="heat">Heatmap – density</option>
+  </select>
+  <label>Protested</label>
+  <select id="pf"><option value="all">All</option><option value="1">YES (protested)</option><option value="0">NO (not protested)</option></select>
+  <label>Present in 2024</label>
+  <select id="p24"><option value="all">All</option><option value="1">YES</option><option value="0">NO</option></select>
+  <label>Market value ($) – min / max</label>
+  <div class="row"><input type="text" id="vmin" placeholder="min"><input type="text" id="vmax" placeholder="max"></div>
+  <label>Zip code</label>
+  <select id="zip"><option value="all">All</option></select>
+  <label>Exemptions <span style="text-transform:none;font-weight:400">(uncheck to hide)</span></label>
+  <details id="exbox"><summary id="exsum">All exemptions</summary>
+    <div style="margin:4px 0"><a href="#" id="exall">Check all</a> | <a href="#" id="exnone">Uncheck all</a></div>
+    <div id="exlist"></div>
+  </details>
+  <div class="legend" id="legend"></div>
+  </div>
+</div>
+<div class="watermark">Developed by <b>Uilvim Franco</b><br>The Center for Research Computing, <b>Rice University</b></div>
+<script src="data.js"></script>
+<script>
+// DATA row: [lat, lon, acct, address, owner, mkt, prior, protested, yr_impr, bld_ar, legal, zip, exemptions[], present_2024]
+const map = L.map('map', {preferCanvas: true}).setView([29.83, -95.45], 10);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'}).addTo(map);
+const renderer = L.canvas({padding: 0.5});
+let layer = null;
+
+const valueBins = [[100000,'#2c7bb6'],[200000,'#00a6ca'],[300000,'#90d743'],[500000,'#fdae61'],[1000000,'#f46d43'],[Infinity,'#a50026']];
+const valueLbl = ['< $100k','$100k–200k','$200k–300k','$300k–500k','$500k–1M','> $1M'];
+const changeBins = [[-0.05,'#2c7bb6'],[0.05,'#bdbdbd'],[0.15,'#fdae61'],[Infinity,'#d7191c']];
+const changeLbl = ['Decrease > 5%','Within ±5%','+5% to +15%','> +15%'];
+const exCount = {};
+DATA.forEach(r => (r[12].length ? r[12] : ['(none)']).forEach(c => exCount[c] = (exCount[c] || 0) + 1));
+const exList = document.getElementById('exlist');
+Object.keys(exCount).sort().forEach(c => {
+  const l = document.createElement('label');
+  l.style.cssText = 'display:block;font-weight:400;margin:1px 0';
+  l.innerHTML = `<input type="checkbox" value="${c}" checked> ${c} (${exCount[c].toLocaleString()})`;
+  exList.appendChild(l);
+});
+const exBoxes = [...exList.querySelectorAll('input')];
+function exUnchecked() { return new Set(exBoxes.filter(b => !b.checked).map(b => b.value)); }
+function setAll(v) { exBoxes.forEach(b => b.checked = v); draw(); }
+document.getElementById('exall').onclick = e => { e.preventDefault(); setAll(true); };
+document.getElementById('exnone').onclick = e => { e.preventDefault(); setAll(false); };
+exList.addEventListener('change', draw);
+const NA = '#777';
+const bin = (v, bins) => { for (const b of bins) if (v < b[0]) return b[1]; };
+const money = v => v == null ? 'n/a' : '$' + v.toLocaleString();
+
+function color(r, mode) {
+  if (mode === 'protest') return r[7] ? '#d7191c' : '#2c7bb6';
+  if (mode === 'change') {
+    if (!r[5] || !r[6]) return NA;
+    return bin((r[5] - r[6]) / r[6], changeBins);
+  }
+  const v = r[5] || r[6];
+  return v ? bin(v, valueBins) : NA;
+}
+
+function legend(mode) {
+  const el = document.getElementById('legend');
+  let items = [];
+  if (mode === 'value') items = valueBins.map((b, i) => [b[1], valueLbl[i]]).concat([[NA, 'No value']]);
+  else if (mode === 'change') items = changeBins.map((b, i) => [b[1], changeLbl[i]]).concat([[NA, 'n/a']]);
+  else if (mode === 'protest') items = [['#d7191c', 'Protested'], ['#2c7bb6', 'Not protested']];
+  el.innerHTML = items.map(i => `<div><i style="background:${i[0]}"></i>${i[1]}</div>`).join('');
+  el.style.display = items.length ? '' : 'none';
+}
+
+function filtered(skipEx) {
+  const pf = document.getElementById('pf').value;
+  const vmin = parseFloat(document.getElementById('vmin').value.replace(/[$,]/g, '')) || 0;
+  const vmax = parseFloat(document.getElementById('vmax').value.replace(/[$,]/g, '')) || Infinity;
+  const zip = document.getElementById('zip').value;
+  const p24 = document.getElementById('p24').value;
+  const hidden = skipEx ? new Set() : exUnchecked();
+  return DATA.filter(r => {
+    if (p24 !== 'all' && r[13] !== +p24) return false;
+    if (hidden.size && (r[12].length ? r[12] : ['(none)']).some(c => hidden.has(c))) return false;
+    if (pf !== 'all' && r[7] !== +pf) return false;
+    if (zip !== 'all' && r[11] !== zip) return false;
+    const v = r[5] || r[6] || 0;
+    if (v < vmin || v > vmax) return false;
+    return true;
+  });
+}
+
+function popup(r) {
+  const chg = r[5] && r[6] ? ((r[5] - r[6]) / r[6] * 100).toFixed(1) + '%' : 'n/a';
+  return `<b>${r[3]}</b><br>Acct: ${r[2]}<br>Market value: ${money(r[5])}<br>Prior value: ${money(r[6])} (${chg})<br>` +
+    `Year built: ${r[8] ?? 'n/a'} &nbsp; Bldg sqft: ${r[9] ?? 'n/a'}<br>Protest: ${r[7] ? 'Yes' : 'No'}<br>Present in 2024: ${r[13] ? 'Yes' : 'No'}<br>Exemptions: ${r[12].join(', ') || 'none'}<br><small>${r[10]}</small>`;
+}
+
+function updateExCounts() {
+  const cnt = {};
+  filtered(true).forEach(r => (r[12].length ? r[12] : ['(none)']).forEach(c => cnt[c] = (cnt[c] || 0) + 1));
+  exBoxes.forEach(b => {
+    const n = cnt[b.value] || 0;
+    b.nextSibling.textContent = ` ${b.value} (${n.toLocaleString()})`;
+    b.parentNode.style.color = n ? '' : '#aaa';
+  });
+}
+
+function draw() {
+  const mode = document.getElementById('mode').value;
+  const rows = filtered();
+  updateExCounts();
+  if (layer) map.removeLayer(layer);
+  document.getElementById('count').textContent = rows.length.toLocaleString();
+  legend(mode);
+  if (mode === 'heat') {
+    layer = L.heatLayer(rows.map(r => [r[0], r[1], 0.5]), {radius: 12, blur: 15, minOpacity: 0.3});
+  } else {
+    layer = L.layerGroup(rows.map(r => L.circleMarker([r[0], r[1]], {
+      renderer, radius: 4, weight: 0, fillOpacity: 0.85, fillColor: color(r, mode)
+    }).bindPopup(() => popup(r))));
+  }
+  layer.addTo(map);
+}
+
+const zipSel = document.getElementById('zip');
+[...new Set(DATA.map(r => r[11]).filter(Boolean))].sort().forEach(z => zipSel.add(new Option(z, z)));
+document.getElementById('total').textContent = DATA.length.toLocaleString();
+['mode', 'pf', 'p24'].forEach(id => document.getElementById(id).addEventListener('change', draw));
+zipSel.addEventListener('change', () => {
+  draw();
+  const z = zipSel.value;
+  const pts = DATA.filter(r => z === 'all' || r[11] === z).map(r => [r[0], r[1]]);
+  if (z === 'all') map.setView([29.83, -95.45], 10);
+  else if (pts.length) map.fitBounds(L.latLngBounds(pts).pad(0.1), {maxZoom: 16});
+});
+['vmin', 'vmax'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') draw(); }));
+draw();
+</script>
+</body>
+</html>
