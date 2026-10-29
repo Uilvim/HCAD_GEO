@@ -32,6 +32,14 @@ details{border:1px solid var(--line);border-radius:8px;padding:6px 9px;backgroun
 summary{cursor:pointer;font-weight:600}
 #exlist{max-height:180px;overflow:auto;border-top:1px solid var(--line);padding-top:4px}
 details a{color:var(--accent);text-decoration:none}
+.range-wrap{position:relative;height:26px;margin:8px 0 2px}
+.range-track{position:absolute;top:50%;left:8px;right:8px;height:4px;margin-top:-2px;background:var(--line);border-radius:2px}
+.range-fill{position:absolute;top:50%;height:4px;margin-top:-2px;background:var(--accent);border-radius:2px}
+.range-wrap input[type=range]{position:absolute;top:0;left:0;width:100%;height:26px;margin:0;background:transparent;pointer-events:none;-webkit-appearance:none;appearance:none}
+.range-wrap input[type=range]::-webkit-slider-runnable-track{background:transparent}
+.range-wrap input[type=range]::-moz-range-track{background:transparent;border:none}
+.range-wrap input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;pointer-events:auto;width:15px;height:15px;border-radius:50%;background:#fff;border:2px solid var(--accent);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.35);margin-top:-5.5px}
+.range-wrap input[type=range]::-moz-range-thumb{pointer-events:auto;width:15px;height:15px;border-radius:50%;background:#fff;border:2px solid var(--accent);cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,.35)}
 .legend{margin-top:14px;padding-top:4px;border-top:1px solid var(--line)}
 .legend div{display:flex;align-items:center;margin:4px 0}
 .legend i{width:12px;height:12px;border-radius:50%;margin-right:8px;display:inline-block}
@@ -63,13 +71,20 @@ details a{color:var(--accent);text-decoration:none}
     <option value="points">Points – clustered</option>
     <option value="heat">Heatmap – density</option>
   </select>
-  <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:13px;color:var(--ink);font-weight:500"><input type="checkbox" id="clus" checked> Cluster points</label>
+  <label style="display:flex;align-items:center;gap:6px;text-transform:none;font-size:13px;color:var(--ink);font-weight:500"><input type="checkbox" id="clus"> Cluster points</label>
   <label>Protested</label>
   <select id="pf"><option value="all">All</option><option value="1">YES (protested)</option><option value="0">NO (not protested)</option></select>
   <label>Present in 2024</label>
   <select id="p24"><option value="all">All</option><option value="1">YES</option><option value="0">NO</option></select>
   <label>Market value ($) – min / max</label>
   <div class="row"><input type="text" id="vmin" placeholder="min"><input type="text" id="vmax" placeholder="max"></div>
+  <label>Year of improvement <span id="yrval" style="float:right;font-weight:400;text-transform:none;color:var(--ink)"></span></label>
+  <div class="range-wrap">
+    <div class="range-track"></div>
+    <div class="range-fill" id="yrfill"></div>
+    <input type="range" id="yrmin">
+    <input type="range" id="yrmax">
+  </div>
   <label>Zip code</label>
   <select id="zip"><option value="all">All</option></select>
   <label>Exemptions <span style="text-transform:none;font-weight:400">(uncheck to hide)</span></label>
@@ -169,6 +184,8 @@ function filtered(skipEx) {
   const zip = document.getElementById('zip').value;
   const p24 = document.getElementById('p24').value;
   const hidden = skipEx ? new Set() : exUnchecked();
+  const yrLo = +yrMinEl.value, yrHi = +yrMaxEl.value;
+  const yrActive = yrLo > YR_MIN || yrHi < YR_MAX;
   return DATA.filter(r => {
     if (p24 !== 'all' && r[13] !== +p24) return false;
     if (hidden.size && (r[12].length ? r[12] : ['(none)']).some(c => hidden.has(c))) return false;
@@ -176,6 +193,7 @@ function filtered(skipEx) {
     if (zip !== 'all' && r[11] !== zip) return false;
     const v = r[5] || r[6] || 0;
     if (v < vmin || v > vmax) return false;
+    if (yrActive && (r[8] == null || r[8] < yrLo || r[8] > yrHi)) return false;
     return true;
   });
 }
@@ -183,7 +201,7 @@ function filtered(skipEx) {
 function popup(r) {
   const chg = r[5] && r[6] ? ((r[5] - r[6]) / r[6] * 100).toFixed(1) + '%' : 'n/a';
   return `<b>${r[3]}</b><br>Acct: ${r[2]}<br>Market value: ${money(r[5])}<br>Prior value: ${money(r[6])} (${chg})<br>` +
-    `Year built: ${r[8] ?? 'n/a'} &nbsp; Bldg sqft: ${r[9] ?? 'n/a'}<br>Protest: ${r[7] ? 'Yes' : 'No'}<br>Present in 2024: ${r[13] ? 'Yes' : 'No'}<br>Exemptions: ${r[12].join(', ') || 'none'}<br><small>${r[10]}</small>`;
+    `Year of improvement: ${r[8] ?? 'n/a'} &nbsp; Bldg sqft: ${r[9] ?? 'n/a'}<br>Protest: ${r[7] ? 'Yes' : 'No'}<br>Present in 2024: ${r[13] ? 'Yes' : 'No'}<br>Exemptions: ${r[12].join(', ') || 'none'}<br><small>${r[10]}</small>`;
 }
 
 function updateExCounts() {
@@ -210,9 +228,22 @@ function draw() {
   if (mode === 'heat') {
     layer = L.heatLayer(rows.map(r => [r[0], r[1], 0.5]), {radius: 12, blur: 15, minOpacity: 0.3});
   } else {
-    const dots = rows.map(r => L.circleMarker([r[0], r[1]], {
-      renderer, radius: dotRadius(), weight: 0, fillOpacity: 0.8, fillColor: '#2563eb'
-    }).bindPopup(() => popup(r)));
+    const dots = rows.map(r => {
+      const m = L.circleMarker([r[0], r[1]], {
+        renderer, radius: dotRadius(), weight: 0, fillOpacity: 0.8, fillColor: '#2563eb'
+      }).bindPopup(() => popup(r));
+      m.on('mouseover', function () {
+        this.setRadius(dotRadius() * 2.5);
+        this.setStyle({fillColor: '#60a5fa', fillOpacity: 1});
+        this.openPopup();
+      });
+      m.on('mouseout', function () {
+        this.setRadius(dotRadius());
+        this.setStyle({fillColor: '#2563eb', fillOpacity: 0.8});
+        this.closePopup();
+      });
+      return m;
+    });
     curDots = dots;
     if (!document.getElementById('clus').checked) layer = L.layerGroup(dots);
     else {
@@ -228,6 +259,37 @@ function draw() {
   }
   layer.addTo(map);
 }
+
+const yrMinEl = document.getElementById('yrmin');
+const yrMaxEl = document.getElementById('yrmax');
+const yrFill = document.getElementById('yrfill');
+const yrVal = document.getElementById('yrval');
+const yrYears = DATA.map(r => r[8]).filter(y => y != null);
+// Ignore obviously bad data-entry years (e.g. "40") when sizing the slider range,
+// but such records still show up by default since no filter is applied unless the slider is moved.
+const yrSane = yrYears.filter(y => y >= 1800);
+const YR_MIN = yrSane.reduce((a, b) => Math.min(a, b), yrSane[0] ?? yrYears[0]);
+const YR_MAX = yrYears.reduce((a, b) => Math.max(a, b), yrYears[0]);
+yrMinEl.min = yrMaxEl.min = YR_MIN;
+yrMinEl.max = yrMaxEl.max = YR_MAX;
+yrMinEl.value = YR_MIN;
+yrMaxEl.value = YR_MAX;
+function syncYrUI(e) {
+  let lo = +yrMinEl.value, hi = +yrMaxEl.value;
+  if (lo > hi) {
+    if (e && e.target === yrMaxEl) { yrMaxEl.value = lo; hi = lo; }
+    else { yrMinEl.value = hi; lo = hi; }
+  }
+  const pct = v => YR_MAX > YR_MIN ? (v - YR_MIN) / (YR_MAX - YR_MIN) * 100 : 0;
+  yrFill.style.left = pct(lo) + '%';
+  yrFill.style.right = (100 - pct(hi)) + '%';
+  yrVal.textContent = `${lo} – ${hi}`;
+}
+yrMinEl.addEventListener('input', syncYrUI);
+yrMaxEl.addEventListener('input', syncYrUI);
+yrMinEl.addEventListener('change', draw);
+yrMaxEl.addEventListener('change', draw);
+syncYrUI();
 
 const zipSel = document.getElementById('zip');
 [...new Set(DATA.map(r => r[11]).filter(Boolean))].sort().forEach(z => zipSel.add(new Option(z, z)));
