@@ -54,13 +54,75 @@ details a{color:var(--accent);text-decoration:none}
 #map.aerial .leaflet-tile-pane{filter:none}
 .leaflet-popup-content-wrapper{border-radius:12px}
 .leaflet-popup-content{font-size:12.5px;line-height:1.5}
+.leaflet-popup-content,.leaflet-popup-content *{user-select:text;-webkit-user-select:text}
+.leaflet-popup-content{cursor:auto}
+.acct{display:inline-flex;align-items:center;gap:6px}
+.acct code{background:#f3f4f6;border-radius:5px;padding:1px 6px;font-weight:700;font-size:12.5px}
+.cbtn{border:1px solid var(--line);background:#fff;border-radius:6px;padding:1px 7px;font:inherit;font-size:11px;cursor:pointer;color:var(--accent)}
+.cbtn:hover{background:#eff6ff}
+.tip{font-size:12px;line-height:1.4}
+.tip small{color:var(--muted)}
+.head{display:flex;align-items:center;gap:8px}
+.head .ttl{flex:1}
+.hbtn{border:1px solid #ffffff88;background:#ffffff22;color:#fff;border-radius:8px;width:28px;height:28px;font:inherit;font-weight:700;cursor:pointer;flex:none}
+.hbtn:hover{background:#ffffff44}
+.panel{transition:transform .25s ease,opacity .25s ease}
+body.collapsed .panel{transform:translateX(calc(100% + 24px));opacity:0;pointer-events:none}
+#reopen{position:absolute;top:12px;right:12px;z-index:1000;display:none;border:1px solid var(--line);background:#ffffffee;border-radius:10px;padding:8px 12px;font:inherit;font-weight:600;color:#1e3a8a;cursor:pointer;box-shadow:0 4px 14px rgba(15,23,42,.18)}
+#reopen:hover{background:#fff}
+body.collapsed #reopen{display:block}
+body.clean #reopen,body.clean .panel,body.clean .watermark,body.clean .leaflet-control-container{display:none}
+#help{position:fixed;inset:0;z-index:2000;background:#0f172a99;display:none;align-items:center;justify-content:center;padding:16px}
+#help.open{display:flex}
+#help .card{background:#fff;border-radius:14px;max-width:560px;max-height:88vh;overflow:auto;padding:20px 24px;box-shadow:0 20px 50px rgba(0,0,0,.35);line-height:1.5}
+#help h2{margin:0 0 4px;font-size:18px;color:#1e3a8a}
+#help h4{margin:14px 0 4px;font-size:13px}
+#help ul,#help ol{margin:4px 0;padding-left:20px}
+#help kbd{background:#f3f4f6;border:1px solid var(--line);border-radius:4px;padding:0 5px;font-size:12px}
+#help .close{float:right;border:0;background:none;font-size:22px;cursor:pointer;color:var(--muted)}
 @media(max-width:700px){.panel{width:auto;left:12px;bottom:auto;max-height:55vh}.watermark{max-width:calc(100% - 24px)}}
 </style>
 </head>
 <body>
 <div id="map"></div>
+<button id="reopen" title="Show panel (H hides all controls)">&#9776; Panel</button>
+<div id="help">
+  <div class="card">
+    <button class="close" id="helpclose" title="Close">&times;</button>
+    <h2>Quick tutorial</h2>
+    <small style="color:#6b7280">Each dot is one geocoded HCAD property account.</small>
+    <h4>1. Look at a property</h4>
+    <ul>
+      <li><b>Hover</b> a dot for a quick preview (address, account #, value).</li>
+      <li><b>Click</b> a dot to pin its details. The popup stays open until you click the map or the &times;, so you can select and copy any text.</li>
+      <li>Use <b>Copy</b> next to <i>Acct</i> to copy the account number, then paste it into the HCAD or Harris County Tax Office account search. Account numbers are always shown as 13 characters (padded with leading zeros).</li>
+      <li>Dots are hard to hit when zoomed out. Zoom in, or just click near a dot; hit areas are larger than the dots themselves.</li>
+    </ul>
+    <h4>2. Filter</h4>
+    <ul>
+      <li>Narrow by <b>Protested</b>, <b>Present in 2024</b>, <b>Market value</b>, <b>Year of improvement</b>, <b>Zip code</b> and <b>Exemptions</b>.</li>
+      <li><b>Matching filters</b> at the top shows how many properties remain. Choosing a zip code also zooms to it.</li>
+    </ul>
+    <h4>3. Change how it looks</h4>
+    <ul>
+      <li><b>View</b>: individual points or a density heatmap. <b>Cluster points</b> groups nearby dots into numbered bubbles.</li>
+      <li>Use the layer control (top-left) for Streets, Aerial, Aerial + labels or Topographic basemaps.</li>
+      <li>Buttons under the zoom: &#8962; reset to Harris County, &#9678; my location, &#9974; fullscreen.</li>
+    </ul>
+    <h4>4. Screenshots of the whole county</h4>
+    <ul>
+      <li>Click <b>&laquo;</b> in the panel header to collapse the panel (and its legend); click <b>&#9776; Panel</b> to bring it back.</li>
+      <li>Press <kbd>H</kbd> to hide <i>all</i> overlays (panel, tab, credit box) for a clean shot; press <kbd>H</kbd> again to restore.</li>
+      <li>Press the &#8962; button first to frame all of Harris County.</li>
+    </ul>
+    <h4>Shortcuts</h4>
+    <ul><li><kbd>P</kbd> collapse / expand the panel &nbsp; <kbd>H</kbd> clean view &nbsp; <kbd>?</kbd> this help &nbsp; <kbd>Esc</kbd> close help</li></ul>
+  </div>
+</div>
 <div class="panel">
-  <div class="head"><h3>HCAD Property Explorer</h3><small>Harris County appraisal records, geocoded</small></div>
+  <div class="head"><div class="ttl"><h3>HCAD Property Explorer</h3><small>Harris County appraisal records, geocoded</small></div>
+    <button class="hbtn" id="helpbtn" title="Tutorial (?)">?</button>
+    <button class="hbtn" id="collapse" title="Collapse panel (P)">&laquo;</button></div>
   <div class="stats">
     <div class="stat"><b id="total">–</b><span>Total properties</span></div>
     <div class="stat hl"><b id="count">–</b><span>Matching filters</span></div>
@@ -133,7 +195,8 @@ const coordBox = L.control({position: 'bottomleft'});
 coordBox.onAdd = () => { const d = L.DomUtil.create('div', 'coords'); d.textContent = 'Lat, Lon: –'; return d; };
 coordBox.addTo(map);
 map.on('mousemove', e => document.querySelector('.coords').textContent = `Lat, Lon: ${e.latlng.lat.toFixed(5)}, ${e.latlng.lng.toFixed(5)}`);
-const renderer = L.canvas({padding: 0.5});
+// tolerance enlarges each dot's hit area so it is easy to hover/click
+const renderer = L.canvas({padding: 0.5, tolerance: 7});
 let layer = null;
 
 const valueBins = [[100000,'#2c7bb6'],[200000,'#00a6ca'],[300000,'#90d743'],[500000,'#fdae61'],[1000000,'#f46d43'],[Infinity,'#a50026']];
@@ -200,9 +263,27 @@ function filtered(skipEx) {
 
 function popup(r) {
   const chg = r[5] && r[6] ? ((r[5] - r[6]) / r[6] * 100).toFixed(1) + '%' : 'n/a';
-  return `<b>${r[3]}</b><br>Acct: ${r[2]}<br>Market value: ${money(r[5])}<br>Prior value: ${money(r[6])} (${chg})<br>` +
+  const acct = fmtAcct(r[2]);
+  return `<b>${r[3]}</b><br>Acct: <span class="acct"><code>${acct}</code><button class="cbtn" onclick="copyAcct(this,'${acct}')">Copy</button></span><br>` +
+    `Market value:  ${money(r[5])}<br>Prior value: ${money(r[6])} (${chg})<br>` +
     `Year of improvement: ${r[8] ?? 'n/a'} &nbsp; Bldg sqft: ${r[9] ?? 'n/a'}<br>Protest: ${r[7] ? 'Yes' : 'No'}<br>Present in 2024: ${r[13] ? 'Yes' : 'No'}<br>Exemptions: ${r[12].join(', ') || 'none'}<br><small>${r[10]}</small>`;
 }
+
+// HCAD account numbers are 13 characters; pad with leading zeros when shorter
+const fmtAcct = a => String(a).replace(/[^\w-]/g, '').padStart(13, '0');
+function copyAcct(btn, text) {
+  const done = () => { btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = 'Copy', 1500); };
+  if (navigator.clipboard && window.isSecureContext) navigator.clipboard.writeText(text).then(done, () => fallbackCopy(text, done));
+  else fallbackCopy(text, done);
+}
+function fallbackCopy(text, done) {
+  const t = document.createElement('textarea');
+  t.value = text; t.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(t); t.select();
+  try { document.execCommand('copy'); done(); } catch (e) {}
+  t.remove();
+}
+const tip = r => `<div class="tip"><b>${r[3]}</b><br>Acct ${fmtAcct(r[2])} &middot; ${money(r[5] || r[6])}<br><small>Click to pin details</small></div>`;
 
 function updateExCounts() {
   const cnt = {};
@@ -231,17 +312,17 @@ function draw() {
     const dots = rows.map(r => {
       const m = L.circleMarker([r[0], r[1]], {
         renderer, radius: dotRadius(), weight: 0, fillOpacity: 0.8, fillColor: '#2563eb'
-      }).bindPopup(() => popup(r));
+      }).bindPopup(() => popup(r), {autoPanPadding: [20, 20], maxWidth: 320})
+        .bindTooltip(() => tip(r), {sticky: true, direction: 'top', offset: [0, -4]});
       m.on('mouseover', function () {
         this.setRadius(dotRadius() * 2.5);
         this.setStyle({fillColor: '#60a5fa', fillOpacity: 1});
-        this.openPopup();
       });
       m.on('mouseout', function () {
         this.setRadius(dotRadius());
         this.setStyle({fillColor: '#2563eb', fillOpacity: 0.8});
-        this.closePopup();
       });
+      m.on('click', function () { this.closeTooltip(); });
       return m;
     });
     curDots = dots;
@@ -304,6 +385,22 @@ zipSel.addEventListener('change', () => {
 });
 ['vmin', 'vmax'].forEach(id => document.getElementById(id).addEventListener('keydown', e => { if (e.key === 'Enter') draw(); }));
 draw();
+
+const helpEl = document.getElementById('help');
+const toggle = (cls, on) => { document.body.classList.toggle(cls, on); setTimeout(() => map.invalidateSize(), 300); };
+document.getElementById('collapse').onclick = () => toggle('collapsed');
+document.getElementById('reopen').onclick = () => toggle('collapsed', false);
+document.getElementById('helpbtn').onclick = () => helpEl.classList.add('open');
+document.getElementById('helpclose').onclick = () => helpEl.classList.remove('open');
+helpEl.addEventListener('click', e => { if (e.target === helpEl) helpEl.classList.remove('open'); });
+document.addEventListener('keydown', e => {
+  if (e.target.matches('input,select,textarea') || e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.key.toLowerCase();
+  if (k === 'h') toggle('clean');
+  else if (k === 'p') toggle('collapsed');
+  else if (k === '?') helpEl.classList.toggle('open');
+  else if (k === 'escape') helpEl.classList.remove('open');
+});
 </script>
 </body>
 </html>
